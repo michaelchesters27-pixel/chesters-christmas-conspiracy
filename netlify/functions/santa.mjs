@@ -37,7 +37,10 @@ function validWishes(b){
 }
 async function finalState(s){
   const ready=await s.get('draw-ready',{type:'json'});
-  if(!ready)return {created:false,year:2026,people:PEOPLE.map(name=>({name,status:'Not sent'}))};
+  if(!ready){
+    const draft=await s.get('draw-draft',{type:'json'});
+    return {created:false,pending:!!draft,year:2026,people:PEOPLE.map(name=>({name,status:'Not sent'}))};
+  }
   const people=await Promise.all(ready.invites.map(async p=>{
     const [wish,rev,sent]=await Promise.all([
       s.get('wishlist-'+p.name,{type:'json'}),
