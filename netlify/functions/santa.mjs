@@ -89,7 +89,7 @@ async function rotateInvitation(s,name){
   // The old link is now invalid because every request checks the active invitation list.
   await s.delete('guest-'+old.token);
   await s.delete('sent-'+name);
-  return finalState(s);
+  return reply(await finalState(s));
 }
 export default async function handler(req){
   if(req.method!=='POST')return reply({error:'Method not allowed'},405);
