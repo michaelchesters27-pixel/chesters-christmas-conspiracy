@@ -209,6 +209,75 @@ function wishForm(edit=false){
     '<button type="submit" class="btn">✧ Seal my Christmas wishes</button></form>';
   return html;
 }
+
+function cinematicCottage(){
+  if(!current||!current.wishlist||current.revealed){renderCurrent();return}
+  opening=false;
+  const thisToken=token;
+  const words=safe(current.name);
+  el.innerHTML='<section class="cinema-shell" aria-label="The cottage doors open to reveal the fireplace and your secret present">'+
+    '<div class="cinema-words"><span class="snowletter">Your wishes are sealed, '+words+'</span>'+
+    '<h2>Santa has one more secret.</h2>'+
+    '<p>Follow the warm light through the doors. There is something waiting by the fire.</p></div>'+
+    '<div class="cinema-window">'+
+      '<div class="cinema-room" aria-hidden="true">'+
+        '<div class="cinema-firelight"></div><div class="cinema-floor"></div>'+
+        '<div class="cinema-beam"></div><div class="cinema-garland"></div>'+
+        '<div class="cinema-mantel"><span class="cinema-candle"></span>'+
+          '<div class="cinema-stockings"><span>❄</span><span>✦</span><span>❄</span></div>'+
+          '<div class="cinema-hearth"><span class="cinema-flame"></span><span class="cinema-flame"></span><span class="cinema-flame"></span>'+
+          '<span class="cinema-log"></span><span class="cinema-log alt"></span></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="gift-rays" aria-hidden="true"></div>'+
+      '<button id="secretGift" class="secret-gift" type="button" disabled onclick="revealGift()" aria-label="Open your wrapped gift to find your Secret Santa recipient">'+
+        '<span class="gift-glow"></span><span class="gift-box"></span><span class="gift-lid"></span>'+
+        '<span class="gift-bow"></span><span class="gift-bow other"></span>'+
+      '</button>'+
+      '<div class="cinema-door left" aria-hidden="true"></div><div class="cinema-door right" aria-hidden="true"></div>'+
+    '</div>'+
+    '<p class="cinema-caption" id="cinemaCaption" role="status">The cottage doors are opening…</p>'+
+    '<p class="helptext">✧ PRIVATE & PERSONAL · YOUR SECRET IS SAFE ✧</p></section>'+nav();
+  const shell=el.querySelector('.cinema-shell');
+  // An animation frame ensures the doors start closed before the transition begins.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    if(shell?.isConnected&&thisToken===token)shell.classList.add('entered');
+  }));
+  const delay=window.matchMedia('(prefers-reduced-motion: reduce)').matches?250:3100;
+  window.setTimeout(()=>{
+    if(!shell?.isConnected||thisToken!==token)return;
+    const button=shell.querySelector('#secretGift');
+    if(button){button.disabled=false;button.classList.add('ready')}
+    const caption=shell.querySelector('#cinemaCaption');
+    if(caption)caption.textContent='A present just for you. Tap it to discover your Christmas secret. 🎁';
+  },delay);
+}
+async function revealGift(){
+  if(opening||!current||current.revealed||!current.wishlist)return;
+  opening=true;
+  const shell=el.querySelector('.cinema-shell');
+  const gift=shell?.querySelector('#secretGift');
+  const caption=shell?.querySelector('#cinemaCaption');
+  if(gift){gift.disabled=true;gift.classList.remove('ready')}
+  if(shell)shell.classList.add('unwrapped');
+  if(caption)caption.textContent='The ribbon falls away… and the magic begins.';
+  try{
+    const revealed=await api('reveal');
+    current=revealed;
+    window.setTimeout(()=>{
+      opening=false;
+      renderCurrent();
+    },1400);
+  }catch(e){
+    opening=false;
+    if(shell?.isConnected){
+      shell.classList.remove('unwrapped');
+      if(gift){gift.disabled=false;gift.classList.add('ready')}
+      if(caption)caption.textContent='Santa needs another moment. Tap the present to try again.';
+    }else err(e);
+  }
+}
+
 function renderCurrent(){
   if(!current){showEnvelope();return}
   if(!current.wishlist){
@@ -216,11 +285,7 @@ function renderCurrent(){
     return;
   }
   if(!current.revealed){
-    el.innerHTML=panel(letterHeading('Your wishes are safe, '+safe(current.name)+'.',
-      'Santa has sealed your letter and placed it by the fire. Now, the best part: your own Christmas mission is waiting.')+
-      hearth()+
-      '<div class="actions"><button class="btn" onclick="reveal()">Break the seal & discover your name</button></div>'+
-      '<small>Promise to keep it secret until Christmas Day.</small>');
+    cinematicCottage();
     return;
   }
   let wish=current.recipientWishlist;
@@ -235,14 +300,14 @@ function renderCurrent(){
     details='<div class="wishlist"><h3>Still waiting for their wishes…</h3>'+
       '<p class="form-description">They have not completed their list yet. Come back soon and Santa will have it ready.</p></div>';
   }
-  el.innerHTML=panel('<span class="letter-kicker">✦ Top secret · A letter for '+safe(current.name)+' ✦</span>'+
+  el.innerHTML='<div class="reveal-card">'+panel('<span class="letter-kicker">✦ Top secret · A letter for '+safe(current.name)+' ✦</span>'+
     '<p>Santa has made his choice. This Christmas, your one very special person is…</p>'+
     '<div class="recipient">'+safe(current.recipient)+'</div>'+
     '<div class="goldline"></div>'+
     '<p>Buy a little something with love, stay within £50, and keep this between us until Christmas Day.</p>'+
     details+
     '<div class="actions"><button class="btn btn-mini" onclick="editWishes()">Update my wishes</button>'+
-    '<button class="btn btn-outline btn-mini" onclick="refreshWishes()">Check their wishlist</button></div>');
+    '<button class="btn btn-outline btn-mini" onclick="refreshWishes()">Check their wishlist</button></div>')+'</div>';
 }
 async function saveWishes(event){
   event.preventDefault();
@@ -252,13 +317,6 @@ async function saveWishes(event){
   status('Santa is sealing your letter');
   try{current=await api('save',{wishes,notes});renderCurrent()}
   catch(e){err(e)}
-}
-async function reveal(){
-  status('The seal is breaking…');
-  try{
-    current=await api('reveal');
-    window.setTimeout(renderCurrent,1150);
-  }catch(e){err(e)}
 }
 function editWishes(){
   el.innerHTML=panel(wishForm(true));
