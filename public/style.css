@@ -323,3 +323,41 @@ body.inside .cinema-room:after{
   .cottage-entry-door.right{animation:none;transform:translateX(100%)}
   .cottage-entry-room,.cottage-entry-caption{animation:none}
 }
+
+
+/* Private organizer control room — matching the warm cabin visual design. */
+.owner-shell{width:min(1020px,100%);margin:10px auto;text-align:center;padding:clamp(25px,4vw,50px)}
+.owner-shell h2{font:500 clamp(38px,5vw,63px)/1 'Cormorant Garamond',Georgia,serif;margin:18px 0}
+.owner-shell>p{font-size:14px;line-height:1.75;color:#f9e9cb}
+.owner-total{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:22px 0;padding:20px;border:1px solid #dbbc8066;background:#301b16b3;border-radius:8px}
+.owner-total span{font:500 48px 'Cormorant Garamond',serif;color:#ffda98}
+.owner-total small{font:11px 'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.1em;color:#e8d6b7}
+.owner-warning{font:11px/1.8 'DM Sans',sans-serif!important;color:#f7cb9f!important;max-width:740px;margin:25px auto 0}
+.owner-note{padding:16px 20px;border:1px solid #e2c18e76;border-radius:8px;background:#51321b71;margin:22px 0!important}
+.owner-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:25px 0}
+.owner-summary>div{display:flex;flex-direction:column;padding:13px 8px;background:#ffe0a10f;border:1px solid #c5a36f55;border-radius:10px}
+.owner-summary b{font:600 39px 'Cormorant Garamond',serif;color:#ffe0a1}
+.owner-summary span{font:10px/1.5 'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.11em;color:#f2e5d0}
+.owner-people{display:flex;flex-direction:column;gap:12px;margin:25px auto}
+.owner-person{border-radius:12px;border:1px solid #c6a77a8a;padding:18px 20px;background:linear-gradient(130deg,rgba(30,18,14,.9),rgba(48,33,25,.79));box-shadow:0 7px 28px #0003;text-align:left}
+.owner-person-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.owner-person h3{font:600 29px 'Cormorant Garamond',Georgia,serif;color:#ffdeb1;margin:0}
+.owner-status-group{display:flex;flex-wrap:wrap;gap:5px}
+.owner-status{padding:5px 8px;border-radius:22px;border:1px solid #967757;color:#dbc9b7;background:#3c2b2a;font:10px 'DM Sans',sans-serif}
+.owner-status.okay{color:#dbf1d1;border-color:#98af72;background:#32543d}
+.owner-link{margin-top:12px}
+.owner-link input{background:#f4e8d5;color:#432921;border:1px solid #d1ad7b;border-radius:6px;width:100%;padding:11px;font:11px/1.4 'DM Sans',sans-serif}
+.owner-controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.owner-controls .btn,.owner-controls .quiet-button{margin:6px 0 0;min-height:37px;padding:9px 11px;font:700 10px 'DM Sans',sans-serif;letter-spacing:0;text-transform:none}
+.owner-controls .quiet-button{border-color:#ac927491}
+.owner-danger{color:#ffd4cd;border-color:#a05b59!important}
+.owner-toast{position:fixed;z-index:90;bottom:28px;left:50%;width:min(470px,90vw);transform:translate(-50%,25px);border-radius:50px;border:1px solid #e3bd80;background:#214337;color:#fff5dc;font:13px/1.5 'DM Sans',sans-serif;padding:14px 20px;text-align:center;box-shadow:0 6px 35px #000a;opacity:0;pointer-events:none;transition:opacity .24s,transform .24s}
+.owner-toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:650px){
+ .owner-shell{padding:24px 14px}
+ .owner-summary{grid-template-columns:repeat(2,1fr)}
+ .owner-person{padding:14px 12px}
+ .owner-person-top{display:block}
+ .owner-status-group{margin-top:9px}
+ .owner-controls .btn,.owner-controls .quiet-button{font-size:10px}
+}
