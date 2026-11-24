@@ -12,7 +12,6 @@ const PERSONAL={
  Jonathan:'The North Pole postman has delivered one very important secret for you, Jonathan.'
 };
 const el=document.getElementById('app');
-const soundButton=document.getElementById('soundToggle');
 const query=new URLSearchParams(location.search);
 let token=query.get('invite');
 let session=query.get('session');
@@ -21,9 +20,9 @@ let current=null;
 let opening=false;
 
 // Only sound effects: wind in the forest, a quiet fire and irregular log crackles.
-// The browser requires a tap or click before it can play.
+// Start on page load when permitted; resume on the first visitor gesture if autoplay is blocked.
 let audio=null,wind=null,windGain=null,fire=null,fireGain=null,crackleLoop=null,recordedFire=null;
-let audioOptedOut=false,audioStarted=false;
+let audioStarted=false;
 function makeNoise(seconds){
   const length=Math.floor(audio.sampleRate*seconds);
   const buffer=audio.createBuffer(1,length,audio.sampleRate);
@@ -32,10 +31,14 @@ function makeNoise(seconds){
   return buffer;
 }
 function startAmbience(){
-  if(audioStarted)return;
+  if(audioStarted){
+    if(audio?.state==='suspended')audio.resume().catch(()=>{});
+    if(recordedFire?.paused)recordedFire.play().catch(()=>{});
+    return;
+  }
   try{
     audio=audio||new (window.AudioContext||window.webkitAudioContext)();
-    audio.resume();
+    audio.resume().catch(()=>{});
     const windFilter=audio.createBiquadFilter();
     windFilter.type='lowpass';windFilter.frequency.value=260;
     windGain=audio.createGain();windGain.gain.value=.036;
@@ -52,7 +55,7 @@ function startAmbience(){
     // The procedural crackles remain a subtle fallback if external audio fails.
     recordedFire=new Audio('https://commons.wikimedia.org/wiki/Special:Redirect/file/Dry_grass_burning_in_open_fireplace.ogg');
     recordedFire.loop=true;recordedFire.volume=.22;
-    recordedFire.play().catch(function(){recordedFire=null});
+    recordedFire.play().catch(()=>{});
     crackleLoop=setInterval(function(){
       if(!audioStarted||Math.random()>.48)return;
       const n=audio.createBufferSource();
@@ -68,27 +71,12 @@ function startAmbience(){
       n.connect(filter).connect(g).connect(audio.destination);n.start();
     },120);
     audioStarted=true;
-    soundButton.textContent='◖ 🔥 Wind & fire on';
-    soundButton.setAttribute('aria-pressed','true');
   }catch(e){
-    soundButton.textContent='Sound unavailable';
+    console.warn('Unable to start winter ambience:', e);
     audioStarted=false;
   }
 }
-function stopAmbience(){
-  if(crackleLoop)clearInterval(crackleLoop);
-  crackleLoop=null;
-  if(recordedFire){recordedFire.pause();recordedFire.currentTime=0;recordedFire=null}
-  try{if(wind){wind.stop();wind.disconnect()}if(fire){fire.stop();fire.disconnect()}}catch(e){}
-  wind=fire=null;audioStarted=false;
-  soundButton.textContent='◌ Wind & fire off';
-  soundButton.setAttribute('aria-pressed','false');
-}
-function toggleAmbience(){
-  if(audioStarted){audioOptedOut=true;stopAmbience()}
-  else{audioOptedOut=false;startAmbience()}
-}
-function enterWithSound(){if(!audioStarted&&!audioOptedOut)startAmbience()}
+function enterWithSound(){startAmbience()}
 
 function snow(){
   const target=document.getElementById('snow');
@@ -281,7 +269,13 @@ async function refreshWishes(){
   catch(e){err(e)}
 }
 snow();
-soundButton.addEventListener('click',toggleAmbience);
+// Attempt immediately on page opening; no on-page mute or sound-off control.
+startAmbience();
+// Browsers that block autoplay will begin sound at the very first interaction.
+window.addEventListener('pointerdown',enterWithSound,{capture:true});
+window.addEventListener('keydown',enterWithSound,{capture:true});
+window.addEventListener('touchstart',enterWithSound,{capture:true});
+window.addEventListener('pageshow',enterWithSound);
 if(token)showEnvelope();
 else if(isTest&&session)testMenu();
 else home();
