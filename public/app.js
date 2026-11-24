@@ -132,6 +132,7 @@ function panel(body){
   return '<div class="letter-outer"><article class="letter">'+body+'</article></div>'+nav();
 }
 function home(){
+  document.body.classList.remove('inside');
   token=null;session=null;current=null;isTest=true;setUrl();
   el.innerHTML='<section class="hero">'+
     '<span class="snowletter">A winter invitation</span>'+
@@ -165,6 +166,7 @@ function renderMenu(invites){
     '<button class="btn btn-outline btn-mini" onclick="startTest(false)">Make a fresh practice draw</button></section>';
 }
 async function testMenu(){
+  document.body.classList.remove('inside');
   if(!isTest||!session){home();return}
   token=null;current=null;setUrl();status('Finding the eight letters');
   try{const result=await api('test-list');renderMenu(result.invites)}
@@ -174,6 +176,7 @@ async function choose(next){
   token=next;current=null;setUrl();await showEnvelope();
 }
 async function showEnvelope(){
+  document.body.classList.remove('inside');
   if(!token){home();return}
   status('An invitation is on its way');
   try{
@@ -192,7 +195,28 @@ async function showEnvelope(){
       '</button></section>'+nav();
   }catch(e){err(e)}
 }
-function openLetter(){enterWithSound();renderCurrent()}
+function openLetter(){
+  if(opening||!current)return;
+  enterWithSound();
+  opening=true;
+  const selectedToken=token;
+  document.body.classList.add('inside');
+  if(windGain)windGain.gain.setTargetAtTime(.012,audio.currentTime,.4);
+  if(fireGain)fireGain.gain.setTargetAtTime(.006,audio.currentTime,.4);
+  if(recordedFire)recordedFire.volume=.32;
+  el.innerHTML='<div class="cottage-entry" role="status" aria-label="Opening the cottage doors and entering the cozy room">'+
+    '<div class="cottage-entry-room"></div>'+
+    '<div class="cottage-entry-door left"></div>'+
+    '<div class="cottage-entry-door right"></div>'+
+    '<p class="cottage-entry-caption">Come inside, '+safe(current.name)+'…<br>The fire is waiting for you.</p>'+
+    '</div>';
+  const wait=window.matchMedia('(prefers-reduced-motion: reduce)').matches?450:2900;
+  window.setTimeout(()=>{
+    if(selectedToken!==token)return;
+    opening=false;
+    renderCurrent();
+  },wait);
+}
 function letterHeading(heading,subheading=''){
   return '<span class="letter-kicker">✦ The Chesters Christmas Conspiracy ✦</span>'+
     '<h2>'+heading+'</h2>'+(subheading?'<p>'+subheading+'</p>':'');
@@ -211,14 +235,15 @@ function wishForm(edit=false){
 }
 
 function cinematicCottage(){
+  document.body.classList.add('inside');
   if(!current||!current.wishlist||current.revealed){renderCurrent();return}
   opening=false;
   const thisToken=token;
   const words=safe(current.name);
   el.innerHTML='<section class="cinema-shell" aria-label="The cottage doors open to reveal the fireplace and your secret present">'+
     '<div class="cinema-words"><span class="snowletter">Your wishes are sealed, '+words+'</span>'+
-    '<h2>Santa has one more secret.</h2>'+
-    '<p>Follow the warm light through the doors. There is something waiting by the fire.</p></div>'+
+    '<h2>Something is waiting by the fire.</h2>'+
+    '<p>Your wishes are safe. The little present beside the fireplace holds your Christmas secret.</p></div>'+
     '<div class="cinema-window">'+
       '<div class="cinema-room" aria-hidden="true">'+
         '<div class="cinema-firelight"></div><div class="cinema-floor"></div>'+
@@ -234,16 +259,16 @@ function cinematicCottage(){
         '<span class="gift-glow"></span><span class="gift-box"></span><span class="gift-lid"></span>'+
         '<span class="gift-bow"></span><span class="gift-bow other"></span>'+
       '</button>'+
-      '<div class="cinema-door left" aria-hidden="true"></div><div class="cinema-door right" aria-hidden="true"></div>'+
+
     '</div>'+
-    '<p class="cinema-caption" id="cinemaCaption" role="status">The cottage doors are opening…</p>'+
+    '<p class="cinema-caption" id="cinemaCaption" role="status">A little present is waiting beside the fire…</p>'+
     '<p class="helptext">✧ PRIVATE & PERSONAL · YOUR SECRET IS SAFE ✧</p></section>'+nav();
   const shell=el.querySelector('.cinema-shell');
   // An animation frame ensures the doors start closed before the transition begins.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     if(shell?.isConnected&&thisToken===token)shell.classList.add('entered');
   }));
-  const delay=window.matchMedia('(prefers-reduced-motion: reduce)').matches?250:3100;
+  const delay=window.matchMedia('(prefers-reduced-motion: reduce)').matches?100:1600;
   window.setTimeout(()=>{
     if(!shell?.isConnected||thisToken!==token)return;
     const button=shell.querySelector('#secretGift');
@@ -279,6 +304,7 @@ async function revealGift(){
 }
 
 function renderCurrent(){
+  document.body.classList.add('inside');
   if(!current){showEnvelope();return}
   if(!current.wishlist){
     el.innerHTML=panel(wishForm()) ;
