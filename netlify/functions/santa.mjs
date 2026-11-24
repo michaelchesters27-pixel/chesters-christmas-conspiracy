@@ -49,30 +49,51 @@ async function finalState(s){
   return {created:true,year:2026,createdAt:ready.createdAt,people};
 }
 async function createFinal(s){
-  const ready=await s.get('draw-ready',{type:'json'});
-  if(ready)return finalState(s);
-  let draft=await s.get('draw-draft',{type:'json'});
-  if(!draft){
-    const pairs=makeDraw();
-    const value={invites:PEOPLE.map(name=>({name,token:token()})),pairs,createdAt:new Date().toISOString()};
-    const result=await s.setJSON('draw-draft',value,{onlyIfNew:true});
-    draft=result.modified?value:await s.get('draw-draft',{type:'json'});
-    if(!draft)throw Error('Unable to resume pending draw. Please retry.');
-  }
-  for(const person of draft.invites){
-    const saved=await s.setJSON('guest-'+person.token,{
-      name:person.name,recipient:draft.pairs[person.name]
-    },{onlyIfNew:true});
-    if(!saved.modified){
-      const existing=await s.get('guest-'+person.token,{type:'json'});
-      if(existing?.name!==person.name||existing?.recipient!==draft.pairs[person.name]){
-        throw Error('Draw conflict. Stop and contact the organizer.');
+  let stage='check-existing-draw';
+  try{
+    const ready=await s.get('draw-ready',{type:'json'});
+    if(ready)return finalState(s);
+    stage='recover-pending-draw';
+    let draft=await s.get('draw-draft',{type:'json'});
+    if(!draft){
+      stage='create-pending-draw';
+      const pairs=makeDraw();
+      const value={invites:PEOPLE.map(name=>({name,token:token()})),pairs,createdAt:new Date().toISOString()};
+      const result=await s.setJSON('draw-draft',value,{onlyIfNew:true});
+      draft=result.modified?value:await s.get('draw-draft',{type:'json'});
+      if(!draft)throw Error('Pending draw could not be recovered');
+    }
+    if(!Array.isArray(draft.invites)||draft.invites.length!==PEOPLE.length||!draft.pairs){
+      throw Error('Pending draw data is incomplete');
+    }
+    stage='save-family-invitations';
+    // A partial attempt is safe to retry: always reuse the same pending draw.
+    for(const person of draft.invites){
+      if(!PEOPLE.includes(person.name)||!isToken(person.token)){
+        throw Error('A pending invitation was invalid');
+      }
+      const data={name:person.name,recipient:draft.pairs[person.name]};
+      const previous=await s.get('guest-'+person.token,{type:'json'});
+      if(previous){
+        if(previous.name!==data.name||previous.recipient!==data.recipient){
+          throw Error('An existing invitation does not match the pending draw');
+        }
+      }else{
+        await s.setJSON('guest-'+person.token,data);
       }
     }
+    stage='finalize-draw';
+    await s.setJSON('draw-ready',{invites:draft.invites,createdAt:draft.createdAt});
+    // Cleanup failure must not turn a successfully saved final draw into an error.
+    try{await s.delete('draw-draft')}catch(e){console.warn('Draft cleanup can be retried')}
+    stage='read-final-draw';
+    return await finalState(s);
+  }catch(error){
+    console.error('Final draw failed at',stage,error);
+    const failure=new Error('The final draw could not be completed');
+    failure.stage=stage;
+    throw failure;
   }
-  await s.setJSON('draw-ready',{invites:draft.invites,createdAt:draft.createdAt},{onlyIfNew:true});
-  await s.delete('draw-draft');
-  return finalState(s);
 }
 async function rotateInvitation(s,name){
   if(!PEOPLE.includes(name))return reply({error:'Unknown family member'},400);
@@ -93,9 +114,10 @@ async function rotateInvitation(s,name){
 }
 export default async function handler(req){
   if(req.method!=='POST')return reply({error:'Method not allowed'},405);
+  let b;
   try{
     if(Number(req.headers?.get?.('content-length')||0)>10000)return reply({error:'Request too large'},413);
-    const b=await req.json();
+    b=await req.json();
     if(!b||typeof b!=='object')return reply({error:'Invalid request'},400);
     const test=b.test===true;
     const s=store(test);
@@ -205,6 +227,10 @@ export default async function handler(req){
     return reply({error:'Unknown command'},400);
   }catch(e){
     console.error('Santa API error',e);
+    // Only a valid organizer can see a diagnostic stage, never assignments or credentials.
+    if(typeof b!=='undefined' && b?.action==='admin-create' && validOwner(b.ownerKey)){
+      return reply({error:'The final draw was interrupted. Please check the draw; do not send invitations yet.',stage:e.stage||'unexpected-error'},500);
+    }
     return reply({error:'The workshop is temporarily unavailable; please try again'},500);
   }
 }
