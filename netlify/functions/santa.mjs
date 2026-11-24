@@ -39,11 +39,12 @@ async function finalState(s){
   const ready=await s.get('draw-ready',{type:'json'});
   if(!ready)return {created:false,year:2026,people:PEOPLE.map(name=>({name,status:'Not sent'}))};
   const people=await Promise.all(ready.invites.map(async p=>{
-    const [wish,rev]=await Promise.all([
+    const [wish,rev,sent]=await Promise.all([
       s.get('wishlist-'+p.name,{type:'json'}),
-      s.get('revealed-'+p.name)
+      s.get('revealed-'+p.name),
+      s.get('sent-'+p.name)
     ]);
-    return {name:p.name,token:p.token,wishlistSaved:!!wish,revealed:rev!==null};
+    return {name:p.name,token:p.token,wishlistSaved:!!wish,revealed:rev!==null,sent:sent!==null};
   }));
   return {created:true,year:2026,createdAt:ready.createdAt,people};
 }
@@ -87,6 +88,7 @@ async function rotateInvitation(s,name){
   await s.setJSON('draw-ready',updated);
   // The old link is now invalid because every request checks the active invitation list.
   await s.delete('guest-'+old.token);
+  await s.delete('sent-'+name);
   return finalState(s);
 }
 export default async function handler(req){
@@ -124,6 +126,14 @@ export default async function handler(req){
       if(b.action==='admin-state')return reply(await finalState(s));
       if(b.action==='admin-create')return reply(await createFinal(s));
       if(b.action==='admin-rotate')return rotateInvitation(s,b.name);
+      if(b.action==='admin-sent'){
+        if(!PEOPLE.includes(b.name))return reply({error:'Unknown family member'},400);
+        if(!await s.get('draw-ready'))return reply({error:'Draw not created'},409);
+        if(b.sent===true)await s.set('sent-'+b.name,'yes');
+        else if(b.sent===false)await s.delete('sent-'+b.name);
+        else return reply({error:'Invalid sent status'},400);
+        return reply(await finalState(s));
+      }
       return reply({error:'Unknown organizer command'},400);
     }
     // Old real-draw setup is disabled; the original practice-era data is never reused.
