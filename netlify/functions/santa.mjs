@@ -1,115 +1,201 @@
 import { getStore } from '@netlify/blobs';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt, createHash, timingSafeEqual } from 'node:crypto';
 
-const people = ['Joan','Aidan','Donna','Michael','Jenna','Paul','Corinna','Jonathan'];
-const spouse = {Joan:'Aidan',Aidan:'Joan',Donna:'Michael',Michael:'Donna',Jenna:'Paul',Paul:'Jenna',Corinna:'Jonathan',Jonathan:'Corinna'};
-const reply = (value,status=200) => new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
-const store = (test=false) => getStore({name:test?'chesters-christmas-sandbox':'chesters-christmas-2026',consistency:'strong'});
-const secret = () => randomBytes(32).toString('hex');
-const validToken = v => typeof v==='string' && /^[a-f0-9]{64}$/.test(v);
-
-function shuffle(items) {
-  const copy=[...items];
-  for(let i=copy.length-1;i>0;i--){
-    const j=randomBytes(4).readUInt32BE(0)%(i+1);
-    [copy[i],copy[j]]=[copy[j],copy[i]];
-  }
-  return copy;
+// Nothing in the family-facing website or organizer dashboard contains a pairing list.
+const PEOPLE=['Joan','Aidan','Donna','Michael','Jenna','Paul','Corinna','Jonathan'];
+const SPOUSES={Joan:'Aidan',Aidan:'Joan',Donna:'Michael',Michael:'Donna',Jenna:'Paul',Paul:'Jenna',Corinna:'Jonathan',Jonathan:'Corinna'};
+const OWNER_KEY_SHA256='4a1a7b063d5f2264e952ed46ef7b22da127deed5f8267873b95e7553e22c9de7';
+const reply=(v,status=200)=>new Response(JSON.stringify(v),{
+  status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store, private','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}
+});
+const token=()=>randomBytes(32).toString('hex');
+const isToken=s=>typeof s==='string' && /^[a-f0-9]{64}$/.test(s);
+const store=test=>getStore({name:test?'chesters-christmas-sandbox':'chesters-christmas-final-2026',consistency:'strong'});
+const validOwner=v=>{
+  if(typeof v!=='string'||v.length>250)return false;
+  const digest=createHash('sha256').update(v).digest();
+  return timingSafeEqual(digest,Buffer.from(OWNER_KEY_SHA256,'hex'));
+};
+function shuffled(a){
+  const b=[...a];
+  for(let i=b.length-1;i>0;i--){const j=randomInt(i+1);[b[i],b[j]]=[b[j],b[i]]}
+  return b;
 }
-function draw() {
+function makeDraw(){
   for(let i=0;i<10000;i++){
-    const shuffled=shuffle(people);
-    if(people.every((name,index)=>shuffled[index]!==name && shuffled[index]!==spouse[name])){
-      return Object.fromEntries(people.map((name,index)=>[name,shuffled[index]]));
+    const result=shuffled(PEOPLE);
+    if(PEOPLE.every((name,j)=>result[j]!==name && result[j]!==SPOUSES[name])){
+      return Object.fromEntries(PEOPLE.map((name,j)=>[name,result[j]]));
     }
   }
-  throw new Error('Could not create a valid family draw');
+  throw Error('Could not create a valid draw');
 }
-
-export default async function handler(request) {
-  if(request.method!=='POST') return reply({error:'Method not allowed'},405);
-  try {
-    const b=await request.json();
+function validWishes(b){
+  return Array.isArray(b.wishes)&&b.wishes.length===3&&
+    b.wishes.every(w=>typeof w==='string'&&w.trim().length>0&&w.length<=300)&&
+    typeof b.notes==='string'&&b.notes.length<=1200;
+}
+async function finalState(s){
+  const ready=await s.get('draw-ready',{type:'json'});
+  if(!ready)return {created:false,year:2026,people:PEOPLE.map(name=>({name,status:'Not sent'}))};
+  const people=await Promise.all(ready.invites.map(async p=>{
+    const [wish,rev]=await Promise.all([
+      s.get('wishlist-'+p.name,{type:'json'}),
+      s.get('revealed-'+p.name)
+    ]);
+    return {name:p.name,token:p.token,wishlistSaved:!!wish,revealed:rev!==null};
+  }));
+  return {created:true,year:2026,createdAt:ready.createdAt,people};
+}
+async function createFinal(s){
+  const ready=await s.get('draw-ready',{type:'json'});
+  if(ready)return finalState(s);
+  let draft=await s.get('draw-draft',{type:'json'});
+  if(!draft){
+    const pairs=makeDraw();
+    const value={invites:PEOPLE.map(name=>({name,token:token()})),pairs,createdAt:new Date().toISOString()};
+    const result=await s.setJSON('draw-draft',value,{onlyIfNew:true});
+    draft=result.modified?value:await s.get('draw-draft',{type:'json'});
+    if(!draft)throw Error('Unable to resume pending draw. Please retry.');
+  }
+  for(const person of draft.invites){
+    const saved=await s.setJSON('guest-'+person.token,{
+      name:person.name,recipient:draft.pairs[person.name]
+    },{onlyIfNew:true});
+    if(!saved.modified){
+      const existing=await s.get('guest-'+person.token,{type:'json'});
+      if(existing?.name!==person.name||existing?.recipient!==draft.pairs[person.name]){
+        throw Error('Draw conflict. Stop and contact the organizer.');
+      }
+    }
+  }
+  await s.setJSON('draw-ready',{invites:draft.invites,createdAt:draft.createdAt},{onlyIfNew:true});
+  await s.delete('draw-draft');
+  return finalState(s);
+}
+async function rotateInvitation(s,name){
+  if(!PEOPLE.includes(name))return reply({error:'Unknown family member'},400);
+  const ready=await s.get('draw-ready',{type:'json'});
+  if(!ready)return reply({error:'Create the family draw first'},409);
+  const old=ready.invites.find(p=>p.name===name);
+  if(!old)return reply({error:'Invitation does not exist'},404);
+  const guest=await s.get('guest-'+old.token,{type:'json'});
+  if(!guest||guest.name!==name)return reply({error:'Unable to recover the invitation; no change made'},500);
+  const newToken=token();
+  await s.setJSON('guest-'+newToken,guest,{onlyIfNew:true});
+  const updated={...ready,invites:ready.invites.map(p=>p.name===name?{name,token:newToken}:p)};
+  await s.setJSON('draw-ready',updated);
+  // The old link is now invalid because every request checks the active invitation list.
+  await s.delete('guest-'+old.token);
+  return finalState(s);
+}
+export default async function handler(req){
+  if(req.method!=='POST')return reply({error:'Method not allowed'},405);
+  try{
+    if(Number(req.headers?.get?.('content-length')||0)>10000)return reply({error:'Request too large'},413);
+    const b=await req.json();
+    if(!b||typeof b!=='object')return reply({error:'Invalid request'},400);
     const test=b.test===true;
     const s=store(test);
 
-    // New test sessions are independent. Repeating this never encounters an
-    // old draw and never reads or modifies any production family invitation.
+    // An independent, disposable test session never touches the final draw.
     if(b.action==='test-start'){
-      if(!test) return reply({error:'Test mode only'},403);
-      const session=secret();
-      const pairs=draw();
-      const invites=people.map(name=>({name,token:secret()}));
-      for(const entry of invites){
-        await s.setJSON('session-'+session+'-guest-'+entry.token,{
-          name:entry.name,recipient:pairs[entry.name],wishlist:null,revealed:false
+      if(!test)return reply({error:'Test mode only'},403);
+      const session=token(),pairs=makeDraw();
+      const invites=PEOPLE.map(name=>({name,token:token()}));
+      for(const p of invites){
+        await s.setJSON('session-'+session+'-guest-'+p.token,{
+          name:p.name,recipient:pairs[p.name],wishlist:null,revealed:false
         });
       }
       await s.setJSON('session-'+session+'-invites',invites);
       return reply({session,invites});
     }
-
-    const session=test && validToken(b.session) ? b.session : null;
-    const prefix=session ? 'session-'+session+'-' : '';
-
+    const session=test&&isToken(b.session)?b.session:null;
+    const prefix=session?'session-'+session+'-':'';
     if(b.action==='test-list'){
-      if(!test||!session) return reply({error:'Test session required'},400);
+      if(!test||!session)return reply({error:'Test session required'},400);
       const invites=await s.get(prefix+'invites',{type:'json'});
-      return invites ? reply({invites,session}) : reply({error:'Test session not found'},404);
+      return invites?reply({session,invites}):reply({error:'Test session not found'},404);
     }
 
-    // Original organizer-protected production draw is deliberately unchanged.
-    if(b.action==='setup'){
-      if(test) return reply({error:'Use the new test experience instead'},400);
-      if(!process.env.SANTA_SETUP_CODE) return reply({error:'Organizer setup has not been configured'},503);
-      if(b.code!==process.env.SANTA_SETUP_CODE) return reply({error:'Incorrect organizer code'},403);
-      if(await s.get('initialized')) return reply({error:'The family draw already exists'},409);
-      const pairs=draw(),invites=people.map(name=>({name,token:secret()}));
-      for(const person of invites) {
-        await s.setJSON('guest-'+person.token,{name:person.name,recipient:pairs[person.name],wishlist:null,revealed:false});
-      }
-      await s.set('initialized','yes',{onlyIfNew:true});
-      return reply({invites});
+    if(typeof b.action==='string'&&b.action.startsWith('admin-')){
+      if(test||!validOwner(b.ownerKey))return reply({error:'Private organizer access required'},403);
+      if(b.action==='admin-state')return reply(await finalState(s));
+      if(b.action==='admin-create')return reply(await createFinal(s));
+      if(b.action==='admin-rotate')return rotateInvitation(s,b.name);
+      return reply({error:'Unknown organizer command'},400);
     }
+    // Old real-draw setup is disabled; the original practice-era data is never reused.
+    if(b.action==='setup')return reply({error:'Use the private organizer dashboard'},403);
+    if(!isToken(b.token))return reply({error:'Invalid invitation'},403);
 
-    if(!validToken(b.token)) return reply({error:'Invalid invitation link'},403);
-    const key=prefix+'guest-'+b.token;
-    const user=await s.get(key,{type:'json'});
-    if(!user) return reply({error:'Invitation not found'},404);
-    const view=async () => {
-      const data={name:user.name,wishlist:user.wishlist,revealed:user.revealed};
-      if(user.revealed){
-        let wishlist=await s.get(prefix+'wishlist-'+user.recipient,{type:'json'});
-        if(test && !wishlist) wishlist={
-          wishes:['A cosy Christmas gift','Something for the house','A surprise under £50'],
-          notes:'These are sample wishes for testing only.',sample:true
-        };
-        data.recipient=user.recipient;
-        data.recipientWishlist=wishlist;
-      }
-      return data;
-    };
-    if(b.action==='view') return reply(await view());
-    if(b.action==='save'){
-      if(!Array.isArray(b.wishes)||b.wishes.length!==3||
-        b.wishes.some(w=>typeof w!=='string'||!w.trim()||w.length>300)||
-        typeof b.notes!=='string'||b.notes.length>1200) {
-        return reply({error:'Please enter three gift ideas, each up to 300 characters.'},400);
-      }
-      user.wishlist={wishes:b.wishes.map(w=>w.trim()),notes:b.notes};
-      await s.setJSON(prefix+'wishlist-'+user.name,user.wishlist);
-      await s.setJSON(key,user);
-      return reply(await view());
+    let key=prefix+'guest-'+b.token;
+    let guest;
+    if(test){
+      if(!session)return reply({error:'Test session required'},403);
+      guest=await s.get(key,{type:'json'});
+    }else{
+      const ready=await s.get('draw-ready',{type:'json'});
+      if(!ready||!ready.invites.some(p=>p.token===b.token))return reply({error:'This invitation is no longer active. Ask your organizer for your private link.'},404);
+      guest=await s.get('guest-'+b.token,{type:'json'});
     }
-    if(b.action==='reveal'){
-      if(!user.wishlist) return reply({error:'Save your wishlist first'},400);
-      user.revealed=true;
-      await s.setJSON(key,user);
-      return reply(await view());
+    if(!guest)return reply({error:'Invitation not found'},404);
+
+    if(test){
+      // Keep sandbox behavior unchanged so all practice flows remain available.
+      const view=async()=>({
+        name:guest.name,wishlist:guest.wishlist,revealed:guest.revealed,
+        ...(guest.revealed?{
+          recipient:guest.recipient,
+          recipientWishlist:(await s.get(prefix+'wishlist-'+guest.recipient,{type:'json'}))||
+            {wishes:['A cosy Christmas gift','Something for the house','A surprise under £50'],
+              notes:'These are sample wishes for testing only.',sample:true}
+        }:{})
+      });
+      if(b.action==='view')return reply(await view());
+      if(b.action==='save'){
+        if(!validWishes(b))return reply({error:'Enter three gift ideas, each under 300 characters'},400);
+        guest.wishlist={wishes:b.wishes.map(w=>w.trim()),notes:b.notes};
+        await s.setJSON(prefix+'wishlist-'+guest.name,guest.wishlist);
+        await s.setJSON(key,guest);
+        return reply(await view());
+      }
+      if(b.action==='reveal'){
+        if(!guest.wishlist)return reply({error:'Save your wishlist first'},400);
+        guest.revealed=true;await s.setJSON(key,guest);
+        return reply(await view());
+      }
+    }else{
+      const view=async()=>{
+        const [wish,revealed]=await Promise.all([
+          s.get('wishlist-'+guest.name,{type:'json'}),
+          s.get('revealed-'+guest.name)
+        ]);
+        const result={name:guest.name,wishlist:wish,revealed:revealed!==null};
+        if(result.revealed){
+          result.recipient=guest.recipient;
+          result.recipientWishlist=await s.get('wishlist-'+guest.recipient,{type:'json'});
+        }
+        return result;
+      };
+      if(b.action==='view')return reply(await view());
+      if(b.action==='save'){
+        if(!validWishes(b))return reply({error:'Enter three gift ideas, each under 300 characters'},400);
+        await s.setJSON('wishlist-'+guest.name,{wishes:b.wishes.map(w=>w.trim()),notes:b.notes});
+        return reply(await view());
+      }
+      if(b.action==='reveal'){
+        const wish=await s.get('wishlist-'+guest.name,{type:'json'});
+        if(!wish)return reply({error:'Seal your wishlist first'},400);
+        await s.set('revealed-'+guest.name,'yes',{onlyIfNew:true});
+        return reply(await view());
+      }
     }
-    return reply({error:'Unknown action'},400);
-  } catch(e) {
-    console.error(e);
-    return reply({error:'Santa’s workshop is temporarily unavailable'},500);
+    return reply({error:'Unknown command'},400);
+  }catch(e){
+    console.error('Santa API error',e);
+    return reply({error:'The workshop is temporarily unavailable; please try again'},500);
   }
 }
+export const config={rateLimit:{action:'rate_limit',aggregateBy:'ip',windowSize:60,windowLimit:120}};
