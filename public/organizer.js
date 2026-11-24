@@ -10,7 +10,11 @@ function ownerApi(action,extra={}){
     body:JSON.stringify({action,test:false,ownerKey,...extra})
   }).then(async r=>{
     let d;try{d=await r.json()}catch(e){throw Error('The Christmas workshop did not respond.')}
-    if(!r.ok)throw Error(d.error||'Unable to access organizer controls');
+    if(!r.ok){
+      const err=new Error(d.error||'Unable to access organizer controls');
+      err.stage=d.stage||'';
+      throw err;
+    }
     return d;
   });
 }
@@ -75,8 +79,8 @@ function ownerRender(){
     el.innerHTML='<section class="menu-shell owner-shell">'+header+
       '<div class="owner-total"><span>8</span><small>family members</small><span>£50</span><small>maximum gift budget</small></div>'+
       '<p>The practice version is completely separate. The earlier draft invitations will <b>not</b> be used for the final family draw.</p>'+
-      '<p><b>Ready to create the one and only final draw?</b> Every person will be assigned someone outside their marriage, and the eight invitation links will remain available here for you to send later.</p>'+
-      '<div class="actions"><button class="btn" onclick="ownerCreate()">✧ Create the final family draw</button>'+
+      '<p><b>'+(ownerState.pending?'A previous draw attempt was interrupted. Resume that same draw safely.':'Ready to create the one and only final draw?')+'</b> Every person will be assigned someone outside their marriage, and the eight invitation links will remain available here for you to send later.</p>'+
+      '<div class="actions"><button class="btn" onclick="ownerCreate()">✧ '+(ownerState.pending?'Resume the saved family draw':'Create the final family draw')+'</button>'+
       '<button class="btn btn-outline" onclick="location.assign(\'/?test=1\')">Open practice mode</button></div>'+
       '<p class="owner-warning">Creating the final draw is permanent. It will not send anything automatically or reveal matches to you.</p>'+
       '</section>';
@@ -159,18 +163,34 @@ async function ownerRotate(name){
 }
 async function ownerCreate(){
   if(ownerBusy||ownerState?.created)return;
-  if(!confirm('Create the FINAL Chesters Christmas 2026 draw for all eight people?\n\nNo spouses will be paired. Only one final draw is created. You will receive eight private links to share individually.'))return;
+  if(!confirm(ownerState?.pending?
+    'Resume the SAME saved final draw? This keeps the existing pairings and does not create another set.':
+    'Create the FINAL Chesters Christmas 2026 draw for all eight people?\n\nNo spouses will be paired. Only one final draw is created. You will receive eight private links to share individually.'))return;
   ownerBusy=true;
-  el.innerHTML='<div class="loading">✧ Santa is carefully drawing eight names ✧</div>';
+  el.innerHTML='<div class="loading">✧ Santa is carefully preparing your eight invitations ✧</div>';
   try{
     ownerState=await ownerApi('admin-create');
     ownerRender();
     ownerNotice('The final draw is ready! Send each personal link when you are ready.');
   }catch(e){
-    ownerState=null;
-    el.innerHTML='<section class="menu-shell owner-shell"><h2>We need to double-check the draw</h2>'+
+    // A backend request can fail after the data was saved: always read the
+    // persisted state before offering any new draw or declaring failure.
+    let checkError='';
+    try{
+      ownerState=await ownerApi('admin-state');
+      if(ownerState.created){
+        ownerRender();
+        ownerNotice('The draw was saved successfully. All eight links are ready.');
+        return;
+      }
+    }catch(inner){checkError=inner.message;ownerState=null}
+    el.innerHTML='<section class="menu-shell owner-shell"><h2>The final draw needs another check</h2>'+
+      '<p>Something interrupted the creation process. No new family links should be sent yet.</p>'+
       '<p>'+ownerEscape(e.message)+'</p>'+
-      '<p>No family invitations have been sent. Refresh the organizer dashboard to check whether creation completed.</p>'+
-      '<button class="btn" onclick="ownerRefresh()">Check the draw</button></section>';
+      (e.stage?'<p>Diagnostic stage: <strong>'+ownerEscape(e.stage)+'</strong></p>':'')+
+      (checkError?'<p>The saved-draw check also failed: '+ownerEscape(checkError)+'</p>':'')+
+      '<button class="btn" onclick="ownerRefresh()">Check saved draw</button>'+
+      (ownerState?.pending?'<button class="btn btn-outline" onclick="ownerRender()">Resume safely</button>':'')+
+      '</section>';
   }finally{ownerBusy=false}
 }
