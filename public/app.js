@@ -15,7 +15,7 @@ const el=document.getElementById('app');
 const query=new URLSearchParams(location.search);
 let token=query.get('invite');
 let session=query.get('session');
-let isTest=query.get('test')==='1'||!token;
+let isTest=query.get('test')==='1';
 let current=null;
 let opening=false;
 
@@ -133,7 +133,19 @@ function panel(body){
 }
 function home(){
   document.body.classList.remove('inside');
-  token=null;session=null;current=null;isTest=true;setUrl();
+  token=null;session=null;current=null;
+  isTest=query.get('test')==='1';setUrl();
+  if(!isTest){
+    el.innerHTML='<section class="hero">'+
+      '<span class="snowletter">A private Christmas invitation</span>'+
+      '<h1>There’s a secret<br>waiting by<br><em>the fire.</em></h1>'+
+      '<div class="goldline"></div>'+
+      '<p>Deep in the snowy woods, Santa has a very special letter for each member of the Chesters family.</p>'+
+      '<p>Your own private invitation will bring you inside the cottage.</p>'+
+      '<p class="helptext">❄ PLEASE ASK MICHAEL FOR YOUR PERSONAL CHRISTMAS LINK ❄</p>'+
+      '</section>';
+    return;
+  }
   el.innerHTML='<section class="hero">'+
     '<span class="snowletter">A winter invitation</span>'+
     '<h1>Some secrets<br>are best kept<br><em>by the fire.</em></h1>'+
