@@ -360,6 +360,7 @@ window.addEventListener('pointerdown',enterWithSound,{capture:true});
 window.addEventListener('keydown',enterWithSound,{capture:true});
 window.addEventListener('touchstart',enterWithSound,{capture:true});
 window.addEventListener('pageshow',enterWithSound);
-if(token)showEnvelope();
+if(query.has('organizer'))openOrganizer();
+else if(token)showEnvelope();
 else if(isTest&&session)testMenu();
 else home();
