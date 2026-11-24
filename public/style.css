@@ -206,3 +206,120 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .cinema-shell.entered .cinema-door.left{transform:translateX(-110%)}
  .cinema-shell.entered .cinema-door.right{transform:translateX(110%)}
 }
+
+
+/* The warm Christmas cabin: enter from the snowy forest and stay indoors. */
+body.inside .scene {
+  background-image:
+    linear-gradient(90deg,rgba(16,8,6,.38),rgba(21,11,7,.03) 48%,rgba(28,13,7,.35)),
+    linear-gradient(0deg,rgba(15,7,5,.82),transparent 38%,rgba(17,8,4,.22) 100%),
+    url('https://images.unsplash.com/photo-1698933787134-af2d451985c7?auto=format&fit=crop&w=1900&q=86');
+  background-position: center center;
+  filter:saturate(1.28) contrast(1.05);
+}
+body.inside .world:before{
+  background:radial-gradient(ellipse at 70% 38%,transparent 20%,rgba(22,8,2,.57) 100%);
+}
+body.inside .world:after {
+  background:radial-gradient(ellipse at 77% 34%,rgba(255,135,40,.24),transparent 39%);
+  animation:fireglow 1.8s ease-in-out infinite alternate;
+}
+body.inside .mist{background:radial-gradient(ellipse,rgba(228,110,48,.09),transparent 70%);}
+body.inside .snowfield{opacity:.05}
+body.inside .brand{color:#ffe8c0}
+body.inside #app {justify-content:center}
+body.inside #app > .letter-outer,
+body.inside #app > .reveal-card{
+  max-width:min(670px,92vw);
+  margin-left:max(20px,calc((100vw - 1380px)/2));
+  margin-right:auto;
+}
+body.inside #app > .reveal-card .letter-outer{width:100%}
+body.inside .bottom{color:#f0cfaa}
+body.inside .cinema-room{
+  background:
+    linear-gradient(0deg,rgba(15,6,1,.22),transparent),
+    url('https://images.unsplash.com/photo-1698933787134-af2d451985c7?auto=format&fit=crop&w=1600&q=85') 75% center / cover;
+}
+body.inside .cinema-beam,
+body.inside .cinema-floor,
+body.inside .cinema-garland,
+body.inside .cinema-mantel,
+body.inside .cinema-firelight{display:none}
+body.inside .cinema-room:after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:radial-gradient(ellipse at 75% 44%,rgba(255,116,25,.25),transparent 31%);
+  mix-blend-mode:screen;
+  animation:fireglow .85s ease-in-out infinite alternate;
+}
+.cottage-entry{position:fixed;inset:0;z-index:30;overflow:hidden;perspective:1600px;background:#100906;isolation:isolate}
+.cottage-entry-room{
+  position:absolute;inset:-3%;
+  background:
+    radial-gradient(ellipse at 78% 38%,rgba(255,122,41,.22),transparent 43%),
+    linear-gradient(0deg,rgba(12,5,2,.65),transparent 36%),
+    url('https://images.unsplash.com/photo-1698933787134-af2d451985c7?auto=format&fit=crop&w=1900&q=86') center / cover;
+  transform:scale(1.16);
+  animation:entryApproach 3s cubic-bezier(.1,.62,.22,1) forwards;
+}
+.cottage-entry-room:after{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 78% 38%,rgba(255,155,48,.22),transparent 35%);
+  animation:fireglow 1s ease-in-out infinite alternate;
+}
+.cottage-entry-door{
+  position:absolute;z-index:2;top:-2%;height:104%;width:50.5%;
+  background:
+   repeating-linear-gradient(90deg,transparent 0 45px,rgba(12,4,3,.55) 48px 54px,transparent 57px 98px),
+   linear-gradient(90deg,#3d2116,#8d512c 15%,#ab7040 48%,#6c391e 86%,#2c1610);
+  border:16px ridge #835131;
+  box-shadow:inset 0 0 70px #190806,0 0 60px #0e0504;
+  backface-visibility:hidden;
+}
+.cottage-entry-door:before{
+  content:'';position:absolute;inset:13% 12% 12%;
+  border:15px groove #a36c3a;
+  box-shadow:inset 0 0 30px #210c07;
+}
+.cottage-entry-door:after{
+  content:'';position:absolute;top:52%;
+  width:25px;height:25px;border-radius:50%;
+  border:3px solid #e8be77;
+  background:radial-gradient(circle,#fff0b6,#a66c2d);
+  box-shadow:0 0 16px #ffc47666;
+}
+.cottage-entry-door.left{left:0;transform-origin:left center;animation:entryLeft 2.4s .15s cubic-bezier(.5,.04,.12,1) forwards}
+.cottage-entry-door.right{right:0;transform-origin:right center;animation:entryRight 2.4s .15s cubic-bezier(.5,.04,.12,1) forwards}
+.cottage-entry-door.left:after{right:9%}
+.cottage-entry-door.right:after{left:9%}
+.cottage-entry-caption{
+  position:absolute;z-index:4;bottom:12%;left:0;right:0;text-align:center;
+  font:500 clamp(28px,5vw,54px)/1.08 'Cormorant Garamond',Georgia,serif;
+  text-shadow:0 4px 19px #000,0 0 14px #000;
+  color:#fff0cf;letter-spacing:.02em;
+  animation:entryText 2.7s both;
+}
+@keyframes entryLeft{to{transform:rotateY(-122deg)}}
+@keyframes entryRight{to{transform:rotateY(122deg)}}
+@keyframes entryApproach{to{transform:scale(1)}}
+@keyframes entryText{0%,18%{opacity:0;transform:translateY(18px)}45%,85%{opacity:1;transform:translateY(0)}100%{opacity:0}}
+@media(max-width:850px){
+  body.inside .scene{
+    background-image:
+      linear-gradient(0deg,rgba(18,7,4,.84),rgba(18,7,4,.24) 48%,rgba(18,7,4,.38)),
+      url('https://images.unsplash.com/photo-1698933787134-af2d451985c7?auto=format&fit=crop&w=1100&q=85');
+    background-position:67% center
+  }
+  body.inside #app > .letter-outer,
+  body.inside #app > .reveal-card{margin:12px auto;max-width:100%}
+  .cottage-entry-room{background-position:67% center}
+  .cottage-entry-door{border-width:9px}
+  .cottage-entry-door:before{border-width:8px}
+}
+@media(prefers-reduced-motion:reduce){
+  .cottage-entry-door.left{animation:none;transform:translateX(-100%)}
+  .cottage-entry-door.right{animation:none;transform:translateX(100%)}
+  .cottage-entry-room,.cottage-entry-caption{animation:none}
+}
