@@ -1,6 +1,16 @@
 "use strict";
 
 const PEOPLE=['Joan','Aidan','Donna','Michael','Jenna','Paul','Corinna','Jonathan'];
+const PERSONAL={
+ Joan:'Your name was the first one I wrote on my Christmas list this evening, Joan.',
+ Aidan:'Just as the first flakes settled on the pines, a letter arrived for you, Aidan.',
+ Donna:'There is a little envelope by the fire with your name written in gold, Donna.',
+ Michael:'The reindeer insisted this special delivery be addressed to you, Michael.',
+ Jenna:'The elves have been saving a particularly lovely letter just for you, Jenna.',
+ Paul:'A quiet little Christmas mystery has travelled all this way for you, Paul.',
+ Corinna:'Santa saved a little sparkle from the winter stars for your letter, Corinna.',
+ Jonathan:'The North Pole postman has delivered one very important secret for you, Jonathan.'
+};
 const el=document.getElementById('app');
 const soundButton=document.getElementById('soundToggle');
 const query=new URLSearchParams(location.search);
@@ -12,7 +22,7 @@ let opening=false;
 
 // Only sound effects: wind in the forest, a quiet fire and irregular log crackles.
 // The browser requires a tap or click before it can play.
-let audio=null,wind=null,windGain=null,fire=null,fireGain=null,crackleLoop=null;
+let audio=null,wind=null,windGain=null,fire=null,fireGain=null,crackleLoop=null,recordedFire=null;
 let audioOptedOut=false,audioStarted=false;
 function makeNoise(seconds){
   const length=Math.floor(audio.sampleRate*seconds);
@@ -38,6 +48,11 @@ function startAmbience(){
     fire=audio.createBufferSource();fire.buffer=makeNoise(2);fire.loop=true;
     fire.connect(fireFilter).connect(fireGain).connect(audio.destination);
     fire.start();
+    // Authentic public-domain fireplace field recording from Wikimedia Commons.
+    // The procedural crackles remain a subtle fallback if external audio fails.
+    recordedFire=new Audio('https://commons.wikimedia.org/wiki/Special:Redirect/file/Dry_grass_burning_in_open_fireplace.ogg');
+    recordedFire.loop=true;recordedFire.volume=.22;
+    recordedFire.play().catch(function(){recordedFire=null});
     crackleLoop=setInterval(function(){
       if(!audioStarted||Math.random()>.48)return;
       const n=audio.createBufferSource();
@@ -63,6 +78,7 @@ function startAmbience(){
 function stopAmbience(){
   if(crackleLoop)clearInterval(crackleLoop);
   crackleLoop=null;
+  if(recordedFire){recordedFire.pause();recordedFire.currentTime=0;recordedFire=null}
   try{if(wind){wind.stop();wind.disconnect()}if(fire){fire.stop();fire.disconnect()}}catch(e){}
   wind=fire=null;audioStarted=false;
   soundButton.textContent='◌ Wind & fire off';
@@ -175,11 +191,12 @@ async function showEnvelope(){
   try{
     current=await api('view');
     const name=safe(current.name);
+    const personal=safe(PERSONAL[current.name]||'A little Christmas secret has arrived with your name on it.');
     el.innerHTML='<section class="envelope-area">'+
       '<div class="envelope-copy">'+
       '<span class="snowletter">Delivered with love from the North Pole</span>'+
       '<h1>'+name+',<br><em>this is for you.</em></h1>'+
-      '<p>The snow is falling. The fire is glowing. And Santa has left a very special envelope with your name on it. Only you can discover what is inside.</p>'+
+      '<p>'+personal+' The fire is glowing inside the cottage, and only you can open this special delivery.</p>'+
       '<div class="helptext">✧ PERSONAL & CONFIDENTIAL · CHRISTMAS 2026</div>'+
       '</div>'+
       '<button class="envelope" type="button" onclick="openLetter()" aria-label="Open the Christmas letter addressed to '+name+'">'+
@@ -194,7 +211,7 @@ function letterHeading(heading,subheading=''){
 }
 function wishForm(edit=false){
   const wishlist=edit&&current.wishlist?current.wishlist:{wishes:['','',''],notes:''};
-  let html=letterHeading('Dear '+safe(current.name)+',','Santa has a little request before he reveals your Christmas secret.');
+  let html=letterHeading('Dear '+safe(current.name)+',','Santa has been waiting for you beside the fire. Before your secret is revealed, he has one little request.');
   html+='<p class="form-description">With a £50 gift budget, write three things you would be delighted to find under the tree. It will help your secret gift-giver make Christmas special.</p>';
   html+='<form id="wishForm" class="wish-form" onsubmit="saveWishes(event)">';
   for(let i=0;i<3;i++)html+='<label for="w'+i+'">Christmas wish No. '+(i+1)+'</label>'+
